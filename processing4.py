@@ -56,7 +56,7 @@ def decrypt_message(key, ciphertext):
     return decrypted_data
 
 def generate_combinations_parallel(args):
-    list_of_lists, index, current_combination,padMsg9,cyphertext, output, stop_event = args
+    list_of_lists, index, current_combination,padMsg9,cyphertext, output, stop_event,num_workers = args
     if stop_event.is_set():
         return
 
@@ -67,10 +67,11 @@ def generate_combinations_parallel(args):
             stop_event.set()  # Set the stop event to signal other processes to stop
             print(current_combination)
         return
-
+    if index == 1:
+        print("num_workers: ",num_workers)
     for chunk in list_of_lists[index]:
         new_combination = current_combination + chunk
-        generate_combinations_parallel((list_of_lists, index + 1, new_combination,padMsg9,cyphertext, output, stop_event))
+        generate_combinations_parallel((list_of_lists, index + 1, new_combination,padMsg9,cyphertext, output, stop_event,num_workers))
 
 
 
@@ -81,14 +82,15 @@ def generate_combinations(list_of_lists,padMsg9,cyphertext):
     executor = ProcessPoolExecutor()
 
     futures = []
-    
+    id = 0
     for chunk in list_of_lists[0]:
-        for chunk1 in list_of_lists[1]:
-            new_combination = chunk + chunk1
-            future = executor.submit(generate_combinations_parallel, (list_of_lists,2, new_combination,padMsg9,cyphertext, output, stop_event))
-            futures.append(future)
+        new_combination = chunk
+        future = executor.submit(generate_combinations_parallel, (list_of_lists,1, new_combination,padMsg9,cyphertext, output, stop_event,id))
+        futures.append(future)
+        id += 1
 
     # Wait for all futures to complete
+    print("futures: ",len(futures))
     for future in futures:
         future.result()
 

@@ -36,7 +36,6 @@ def generate_combinations(list_of_lists):
     executor = ProcessPoolExecutor(max_workers=multiprocessing.cpu_count())
 
     futures = []
-    
     for chunk in list_of_lists[0]:
         future = executor.submit(generate_combinations_parallel, (list_of_lists, 1, chunk, output, stop_event))
         futures.append(future)
