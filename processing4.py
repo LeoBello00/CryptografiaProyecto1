@@ -57,9 +57,10 @@ def decrypt_message(key, ciphertext):
 
 def generate_combinations_parallel(args):
     list_of_lists, index, current_combination,padMsg9,cyphertext, output, stop_event,num_workers = args
+    print("index: ",index)
     if stop_event.is_set():
         return
-
+    print("index: ",index)
     if index == len(list_of_lists):
         msg = decrypt_message(current_combination, cyphertext)
         if msg == padMsg9:
@@ -90,7 +91,7 @@ def generate_combinations(list_of_lists,padMsg9,cyphertext):
         id += 1
 
     # Wait for all futures to complete
-    print("futures: ",len(futures))
+    print("futurjes: ",len(futures))
     for future in futures:
         future.result()
 
