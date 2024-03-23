@@ -4,10 +4,8 @@ from multiprocessing import Manager
 from Crypto.Cipher import AES
 from itertools import product
 
+
 def bits_to_hex(bits):
-    # Padding the bits with zeros to make the length a multiple of 4
-    while len(bits) % 4 != 0:
-        bits = '0' + bits
 
     # Dictionary mapping binary strings to hexadecimal digits
     binary_to_hex = {
@@ -36,19 +34,26 @@ def bits_to_hex(bits):
 
     return hex_string
 
-def decrypt_message(key, ciphertext):
-    key = bits_to_hex(key)
-    key = bytes.fromhex(key)
-    ciphertext = bytes.fromhex(ciphertext)
+def set_cipher(cipherTmp):
+    global cipherTxt
+    global ivGlobal
+    cipherTxt = bytes.fromhex(cipherTmp)
+    ivGlobal = cipherTxt[:AES.block_size]
+
+
+
+def decrypt_message(key,iv,cipherTxt):
+    #key = bits_to_hex(key)
+    #key = bytes.fromhex(key)
     # Extract the IV from the beginning of the ciphertext
-    iv = ciphertext[:AES.block_size]
 
     # Create AES cipher object in CBC mode
-    cipher = AES.new(key, AES.MODE_CBC, iv)
+
+    cipher1 = AES.new(key, AES.MODE_CBC, iv)
 
     # Decrypt the ciphertext
 
-    decrypted_data = cipher.decrypt(ciphertext[AES.block_size:])
+    decrypted_data = cipher1.decrypt(cipherTxt[AES.block_size:])
     
     # Unpad the decrypted data
     #unpadded_data = unpad(decrypted_data, AES.block_size)
@@ -56,67 +61,87 @@ def decrypt_message(key, ciphertext):
     # Return the unpadded data
     return decrypted_data
 
-def generate_combinations_parallel(args):
-    list_of_lists, index, current_combination,padMsg9,cyphertext, output, stop_event,num_workers = args
-    if stop_event.is_set():
-        return
-    if index == len(list_of_lists):
-        msg = decrypt_message(current_combination, cyphertext)
-        if msg == padMsg9:
-            output.put(current_combination)
-            stop_event.set()  # Set the stop event to signal other processes to stop
-            print(current_combination)
-        return
-    if index == 1:
-        print("num_workers: ",num_workers)
-    for chunk in list_of_lists[index]:
-        new_combination = current_combination + chunk
-        generate_combinations_parallel((list_of_lists, index + 1, new_combination,padMsg9,cyphertext, output, stop_event,num_workers))
 
-
-
-def generate_combinations(list_of_lists,padMsg9,cyphertext):
-    manager = Manager()
-    output = manager.Queue()
-    stop_event = manager.Event()  # Event to signal stopping
-    executor = ProcessPoolExecutor()
-
-    futures = []
-    id = 0
-    for chunk in list_of_lists[0]:
-        new_combination = chunk
-        future = executor.submit(generate_combinations_parallel, (list_of_lists,1, new_combination,padMsg9,cyphertext, output, stop_event,id))
-        futures.append(future)
-        id += 1
-
-    # Wait for all futures to complete
-    print("futurjes: ",len(futures))
-    for future in futures:
-        future.result()
-
-    # Get results from the output queue
+def gen_combo_without_threding(list_of_lists,padMsg9,cyphertext):
+    set_cipher(cyphertext)
+    listTmp = []
+    listTmp1 = []
+    for i in range(len(list_of_lists)):
+        for comb in list_of_lists[i]:
+            listTmp.append(bytes.fromhex(bits_to_hex(comb)))
+        listTmp1.append(listTmp)
+        listTmp = []
     results = []
+    print("listTmp1: ",listTmp1)
+    for key in product(*listTmp1):
+        key1 = bytes.join(b'',list(key))
+        msg = decrypt_message(key1)
+        if msg == padMsg9:
+            results = key1
+            print(results)
+            break
+        
+    return results
+
+def gen_combo_without_threding_v2(list_of_lists,padMsg9,output):  
+    for key in product(*list_of_lists):
+        key1 = bytes.join(b'',list(key))
+        msg = decrypt_message(key1)
+        if msg == padMsg9:
+            results = key1
+            print(results)
+            break
+        
+    return results
+
+def decrypt_message_v2(key,padMsg9,iv,ciphertext,output,stop_event):
+    msg = decrypt_message(key,iv,ciphertext)
+    if msg == padMsg9:
+        output.put(key)
+        stop_event.set()
+    return
+
+def multithreading_decryption(list_of_lists,padMsg9,cyphertext):
+    set_cipher(cyphertext)
+    cipherTxt1 = bytes.fromhex(cyphertext)
+    iv = cipherTxt1[:AES.block_size]
+    output = multiprocessing.Queue()
+    stop_event = multiprocessing.Event()  # Event to signal stopping
+    processes = []
+    listTmp = []
+    listTmp1 = []
+    for i in range(len(list_of_lists)):
+        for comb in list_of_lists[i]:
+            listTmp.append(bytes.fromhex(bits_to_hex(comb)))
+        listTmp1.append(listTmp)
+        listTmp = []
+    results = []
+    for key in product(*listTmp1):
+        key1 = bytes.join(b'',list(key))
+        process = multiprocessing.Process(target=decrypt_message_v2, args=(key1,padMsg9,iv,cipherTxt1,output,stop_event))
+        process.start()
+        processes.append(process)
+        if(processes.__len__() > 100):
+            for process in processes:
+                process.join()
+            processes = []
+        if stop_event.is_set():
+            break
+    for process in processes:
+        process.join()
+    
     while not output.empty():
         result = output.get()
         results.append(result)
-
+        
     return results
-
-def gen_combo_without_threding(list_of_lists,padMsg9,cyphertext):
     
-    li = ['a', 'b', 'c']
-    for comb in product(li, repeat=len(li)):
-        print(''.join(comb))
-        msg = decrypt_message(''.join(comb), cyphertext)
-        if msg == padMsg9:
-            results = ''.join(comb)
-            print(results)
-
-    return results
 
 def gen_combo_without_threding_test(list_of_lists):
 
     results = []
-    results = list(product(*list_of_lists))
+    for key in product(*list_of_lists):
+        key1 = ''.join(''.join(x) for x in key) 
+        results.append(key1)
     return results
 
