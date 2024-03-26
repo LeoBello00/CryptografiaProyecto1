@@ -15,6 +15,8 @@ MSG_PAIRS_1 = [
     (b"There's always another secret.", 'e6a5848b0de3b162f98e23e56972bff6de0a7305c41ce921ec56c19af4921ed367ecc25305544a5c722640dbfdf27105')
 ]
 
+#this function is used to divide the list of lists of possible chunks of keys into n lists of equal length
+#this facilates the parallel processing of the chunks,because i can give a list to every core of the cpu
 def generate_multiple_lists(list_of_lists,n):
     listTmp = []
     listTmp1 = []
@@ -88,6 +90,9 @@ def decrypt_message(key, ciphertext,iv):
     
     # Return the unpadded data
     return decrypted_data
+
+#this function is used to generate all the possible combinations of the chunks of keys, and once teh msg is decrypted it checks if it is the right one
+#if it is the right one it prints the key
 def generate_combinations_parallel(list_of_lists, index, current_combination, padMsg9,cyphertext,iv,counter):
 
     if index == len(list_of_lists):
@@ -104,6 +109,8 @@ def generate_combinations_parallel(list_of_lists, index, current_combination, pa
         counter = generate_combinations_parallel(list_of_lists, index + 1, new_combination, padMsg9, cyphertext,iv,counter)
     return counter
 
+#this function prepare the list of lists of possible chunks of keys to be processed by the parallel function
+#once it is ready it starts the parallel processing
 def generate_combinations1(list_of_lists,padMsg9,cyphertext):
     output = multiprocessing.Queue()
     stop_event = multiprocessing.Event()  # Event to signal stopping
