@@ -3,7 +3,10 @@ from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Manager
 from Crypto.Cipher import AES
 from itertools import product
+from itertools import repeat
+from functools import partial
 
+found = False
 
 def bits_to_hex(bits):
 
@@ -93,20 +96,45 @@ def gen_combo_without_threding_v2(list_of_lists,padMsg9,output):
             break
         
     return results
+s_event = multiprocessing.Event() 
 
-def decrypt_message_v2(key,padMsg9,iv,ciphertext,output,stop_event):
+def decrypt_message_v2(key,padMsg9,iv,ciphertext):
+    key = bytes.join(b'',key)
     msg = decrypt_message(key,iv,ciphertext)
-    if msg == padMsg9:
-        output.put(key)
-        stop_event.set()
-    return
+    return msg
+
+def generate_multiple_lists(list_of_lists,n):
+    listTmp = []
+    listTmp1 = []
+    for i in range(len(list_of_lists[0])):
+        listTmp.append(list_of_lists[0][i])
+        if len(listTmp) == n:
+            listTmp1.append(listTmp)
+            listTmp = []
+    if len(listTmp) > 0:
+        listTmp1.append(listTmp)
+    listTmp = []
+    listFinal =[]
+    listsFinal = []
+    list_of_lists.pop(0)
+    for elem in listTmp1:
+        listFinal.append(elem)
+        for elem1 in list_of_lists:
+            listFinal.append(elem1)
+        listsFinal.append(listFinal)
+        listFinal = []
+
+    return listsFinal
 
 def multithreading_decryption(list_of_lists,padMsg9,cyphertext):
+
     set_cipher(cyphertext)
     cipherTxt1 = bytes.fromhex(cyphertext)
     iv = cipherTxt1[:AES.block_size]
-    output = multiprocessing.Queue()
-    stop_event = multiprocessing.Event()  # Event to signal stopping
+    Manager = multiprocessing.Manager()
+    output = Manager.Queue()
+    stop_event = Manager.Event()  # Event to signal stopping
+    found = False
     processes = []
     listTmp = []
     listTmp1 = []
@@ -116,26 +144,54 @@ def multithreading_decryption(list_of_lists,padMsg9,cyphertext):
         listTmp1.append(listTmp)
         listTmp = []
     results = []
-    for key in product(*listTmp1):
-        key1 = bytes.join(b'',list(key))
-        process = multiprocessing.Process(target=decrypt_message_v2, args=(key1,padMsg9,iv,cipherTxt1,output,stop_event))
+    key1 = []
+    listTmp1 = listTmp1
+    n = len(list_of_lists[0]) // 6
+    listsToElaborate = generate_multiple_lists(listTmp1,n)
+    listsToElaborate = []
+    listsToElaborate.append(listTmp1)
+    for list1 in listsToElaborate:
+        process = multiprocessing.Process(target=start_production, args=(list1,padMsg9,cyphertext,output,stop_event))
         process.start()
         processes.append(process)
-        if(processes.__len__() > 100):
-            for process in processes:
-                process.join()
-            processes = []
-        if stop_event.is_set():
-            break
+    print("Processes started")
+    print("number of processes: ",len(processes))
     for process in processes:
         process.join()
-    
+
     while not output.empty():
         result = output.get()
         results.append(result)
-        
+    
     return results
     
+def start_production(list_of_lists,padMsg9,cyphertext,output,stop_event):
+    cipherTxt1 = bytes.fromhex(cyphertext)
+    iv = cipherTxt1[:AES.block_size]
+    key1 = []
+    nKeys = 1000000
+    for key in product(*list_of_lists):
+        key1.append(key)
+        #key1.append(bytes.join(b'',key))
+        #key1 = b''
+        #for i in range(len(key)):
+            #key1 += key[i]
+        if(len(key1) == nKeys):
+            with multiprocessing.Pool() as pool:
+                results = pool.starmap(decrypt_message_v2, zip(key1,repeat(padMsg9),repeat(iv),repeat(cipherTxt1)))
+                for result in results:
+                    if result == padMsg9:
+                        output.put(key1)
+                        stop_event.set()
+                        break
+            key1 = []
+            print("number of keys: ",nKeys)
+            if found:
+                break
+        if stop_event.is_set():
+            break
+   
+    return 
 
 def gen_combo_without_threding_test(list_of_lists):
 

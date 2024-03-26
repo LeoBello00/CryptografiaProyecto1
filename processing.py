@@ -13,6 +13,30 @@ MSG_PAIRS_1 = [
     (b"There's always another secret.", 'e6a5848b0de3b162f98e23e56972bff6de0a7305c41ce921ec56c19af4921ed367ecc25305544a5c722640dbfdf27105')
 ]
 
+def generate_multiple_lists(list_of_lists,n):
+    listTmp = []
+    listTmp1 = []
+    for i in range(len(list_of_lists[0])):
+        listTmp.append(list_of_lists[0][i])
+        if len(listTmp) == n:
+            listTmp1.append(listTmp)
+            listTmp = []
+    if len(listTmp) > 0:
+        listTmp1.append(listTmp)
+    listTmp = []
+    listFinal =[]
+    listsFinal = []
+    list_of_lists.pop(0)
+    print("len: ",len(listTmp1))
+    for elem in listTmp1:
+        listFinal.append(elem)
+        for elem1 in list_of_lists:
+            listFinal.append(elem1)
+        listsFinal.append(listFinal)
+        listFinal = []
+
+    return listsFinal
+
 def bits_to_hex(bits):
     # Padding the bits with zeros to make the length a multiple of 4
     while len(bits) % 4 != 0:
@@ -45,12 +69,10 @@ def bits_to_hex(bits):
 
     return hex_string
 
-def decrypt_message(key, ciphertext):
-    key = bits_to_hex(key)
-    key = bytes.fromhex(key)
-    ciphertext = bytes.fromhex(ciphertext)
+def decrypt_message(key, ciphertext,iv):
+    #ciphertext = bytes.fromhex(ciphertext)
     # Extract the IV from the beginning of the ciphertext
-    iv = ciphertext[:AES.block_size]
+    #iv = ciphertext[:AES.block_size]
 
     # Create AES cipher object in CBC mode
     cipher = AES.new(key, AES.MODE_CBC, iv)
@@ -64,32 +86,52 @@ def decrypt_message(key, ciphertext):
     
     # Return the unpadded data
     return decrypted_data
-def generate_combinations_parallel(list_of_lists, index, current_combination, padMsg9,cyphertext, output, stop_event):
+def generate_combinations_parallel(list_of_lists, index, current_combination, padMsg9,cyphertext,iv, output, stop_event,counter):
     if stop_event.is_set():  # Check if the stop event is set
-        return
+        return counter
 
     if index == len(list_of_lists):
-        msg = decrypt_message(current_combination, cyphertext)
+        msg = decrypt_message(current_combination, cyphertext,iv)
+        counter += 1
+        if counter % 1000000 == 0:
+            print(counter)
         if msg == padMsg9:
             output.put(current_combination)
             stop_event.set()  # Set the stop event to signal other processes to stop
             print(current_combination)
-        return
+        return counter
 
     for chunk in list_of_lists[index]:
         new_combination = current_combination + chunk
-        generate_combinations_parallel(list_of_lists, index + 1, new_combination, padMsg9, cyphertext, output, stop_event)
+        counter = generate_combinations_parallel(list_of_lists, index + 1, new_combination, padMsg9, cyphertext,iv, output, stop_event,counter)
+    return counter
 
 def generate_combinations1(list_of_lists,padMsg9,cyphertext):
     output = multiprocessing.Queue()
     stop_event = multiprocessing.Event()  # Event to signal stopping
     processes = []
-    
+    cyphertext = bytes.fromhex(cyphertext)
+    iv = cyphertext[:AES.block_size]
+    listTmp = []
+    listTmp1 = []
+    for i in range(len(list_of_lists)):
+        for comb in list_of_lists[i]:
+            listTmp.append(bytes.fromhex(bits_to_hex(comb)))
+        listTmp1.append(listTmp)
+        listTmp = []
+    n = len(listTmp1[0]) // 16
+    listsToElaborate = generate_multiple_lists(listTmp1,n)
+    print("lenlistsToElaborate: ",len(listsToElaborate))
     # Start a separate process for each chunk in the first list
-    for chunk in list_of_lists[0]:
-        process = multiprocessing.Process(target=generate_combinations_parallel, args=(list_of_lists, 1, chunk, padMsg9,cyphertext,output, stop_event))
+    #for chunk in list_of_lists[0]:
+        #process = multiprocessing.Process(target=generate_combinations_parallel, args=(list_of_lists, 1, chunk, padMsg9,cyphertext,iv,output, stop_event))
+        #process.start()
+        #processes.append(process)
+    for list in listsToElaborate:
+        process = multiprocessing.Process(target=generate_combinations_parallel, args=(list, 0, b'', padMsg9,cyphertext,iv,output, stop_event,0))
         process.start()
         processes.append(process)
+    print("len: ",len(processes))
 
     # Join all processes
     for process in processes:
