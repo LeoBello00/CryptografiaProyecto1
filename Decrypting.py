@@ -147,6 +147,7 @@ def multithreading_decryption(list_of_lists,padMsg9,cyphertext):
     key1 = []
     listTmp1 = listTmp1
     n = len(list_of_lists[0]) // 6
+    print("n: ",n)
     listsToElaborate = generate_multiple_lists(listTmp1,n)
     listsToElaborate = []
     listsToElaborate.append(listTmp1)

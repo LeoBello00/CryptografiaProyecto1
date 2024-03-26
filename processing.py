@@ -117,7 +117,7 @@ def generate_combinations1(list_of_lists,padMsg9,cyphertext):
             listTmp.append(bytes.fromhex(bits_to_hex(comb)))
         listTmp1.append(listTmp)
         listTmp = []
-    n = len(listTmp1[0]) // 7
+    n = len(listTmp1[0]) // 6
     listsToElaborate = generate_multiple_lists(listTmp1,n)
     print("lenlistsToElaborate: ",len(listsToElaborate))
     # Start a separate process for each chunk in the first list
@@ -132,7 +132,7 @@ def generate_combinations1(list_of_lists,padMsg9,cyphertext):
         
     #cProfile.run('generate_combinations_parallel(listsToElaborate[0], 0, b\'\', padMsg9,cyphertext,iv,0)')
     with multiprocessing.Pool() as pool:
-            results = pool.starmap(generate_combinations_parallel, zip(listsToElaborate,repeat(0),repeat(b''),repeat(padMsg9),repeat(cyphertext),repeat(iv),repeat(0)))
+        results = pool.starmap(generate_combinations_parallel, zip(listsToElaborate,repeat(0),repeat(b''),repeat(padMsg9),repeat(cyphertext),repeat(iv),repeat(0)))
     # Join all processes
 
     # Get results from the output queue
