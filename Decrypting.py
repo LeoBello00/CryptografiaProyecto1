@@ -5,8 +5,133 @@ from Crypto.Cipher import AES
 from itertools import product
 from itertools import repeat
 from functools import partial
+from numba import cuda
 
 found = False
+
+from numba import jit, cuda
+import numpy as np
+
+@jit(target=cuda.jit(device=True))
+def thread_idx(n):
+    """
+    Calculates the thread index within a CUDA block.
+
+    Args:
+        n (int): The total number of elements.
+
+    Returns:
+        int: The index of the current thread.
+    """
+    return cuda.threadIdx.x + cuda.blockIdx.x * cuda.blockDim.x
+
+@jit(target=cuda.jit(device=True))
+def block_idx(n):
+    """
+    Calculates the block index within a CUDA grid.
+
+    Args:
+        n (int): The total number of elements.
+
+    Returns:
+        int: The index of the current block.
+    """
+    return int(cuda.threadIdx.x / cuda.blockDim.x)
+
+@cuda.jit(nopython=True)
+def cartesian_product_gpu(d_in_lists, d_out, n_lists):
+    """
+    Calculates the Cartesian product of multiple lists on the GPU using CUDA.
+
+    Args:
+        d_in_lists (cuda.device_array): A 2D device array containing the input lists.
+        d_out (cuda.device_array): A 1D device array to store the results.
+        n_lists (int): The number of input lists.
+    """
+    idx = thread_idx(d_out.size)
+
+    if idx >= d_out.size:
+        return
+
+    # Calculate indices for each input list
+    indices = []
+    product_size = 1
+    for i in range(n_lists):
+        list_size = d_in_lists[i, 0]
+        product_size *= list_size
+        indices.append(idx % list_size)
+        idx //= list_size
+
+    # Check if this thread corresponds to a valid combination
+    if product_size <= idx:
+        return
+
+    # Flatten the indices into a single index for the output array
+    flat_idx = 0
+    for i in range(n_lists):
+        flat_idx += indices[i] * product_size // (product_size // d_in_lists[i, 0])
+
+    d_out[flat_idx] = block_idx(d_out.size) * product_size + idx
+
+def cartesian_product(lists):
+    """
+    Calculates the Cartesian product of multiple lists using the GPU if available,
+    otherwise falls back to CPU implementation.
+
+    Args:
+        lists (list): A list of lists containing the input data.
+
+    Returns:
+        list: A list containing all combinations of elements from the input lists.
+    """
+    n_lists = len(lists)
+    if not cuda.is_available():
+        print("CUDA is not available. Falling back to CPU implementation.")
+        return cartesian_product_cpu(lists)
+
+    # Allocate device memory for input and output arrays
+    n_elements = 1
+    for lst in lists:
+        n_elements *= len(lst)
+    d_in_lists = cuda.device_array((n_lists, 1), dtype=np.int32)
+    d_out = cuda.device_array(n_elements, dtype=np.int32)
+
+    # Transfer input lists to device memory
+    for i in range(n_lists):
+        d_in_lists[i, 0] = len(lists[i])
+    cuda.to_device(lists, d_in_lists[1:])
+
+    # Launch the CUDA kernel with appropriate block size
+    threadsperblock = 256
+    blockspergrid = (n_elements + threadsperblock - 1) // threadsperblock
+    cartesian_product_gpu[blockspergrid, threadsperblock](d_in_lists, d_out, n_lists)
+
+    # Transfer results back from device memory
+    results = d_out.to_host()
+    results = results[results != -1]  # Filter out invalid combinations
+
+    # Convert indices back to element values
+    output_lists = []
+    for i in range(n_lists):
+        output_lists.append([lists[i][j] for j in results % len(lists[i])])
+        results //= len(lists[i])
+
+    return list(zip(*output_lists))
+
+def cartesian_product_cpu(list_of_lists):
+    results = []
+    for key in product(*list_of_lists):
+        key1 = ''.join(''.join(x) for x in key) 
+        results.append(key1)
+    return results
+
+@cuda.jit(device=True)
+def cartesian_product_gpu(list_of_lists):
+    results = []
+    for key in product(*list_of_lists):
+        key1 = ''.join(''.join(x) for x in key) 
+        results.append(key1)
+    return results
 
 def bits_to_hex(bits):
 
