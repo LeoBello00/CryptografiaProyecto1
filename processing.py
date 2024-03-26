@@ -1,3 +1,4 @@
+from itertools import repeat
 import multiprocessing
 from Crypto.Cipher import AES
 MSG_PAIRS_1 = [
@@ -86,24 +87,20 @@ def decrypt_message(key, ciphertext,iv):
     
     # Return the unpadded data
     return decrypted_data
-def generate_combinations_parallel(list_of_lists, index, current_combination, padMsg9,cyphertext,iv, output, stop_event,counter):
-    if stop_event.is_set():  # Check if the stop event is set
-        return counter
+def generate_combinations_parallel(list_of_lists, index, current_combination, padMsg9,cyphertext,iv,counter):
 
     if index == len(list_of_lists):
         msg = decrypt_message(current_combination, cyphertext,iv)
         counter += 1
         if counter % 1000000 == 0:
             print(counter)
-        if msg == padMsg9:
-            output.put(current_combination)
-            stop_event.set()  # Set the stop event to signal other processes to stop
+        if msg == padMsg9: # Set the stop event to signal other processes to stop
             print(current_combination)
         return counter
 
     for chunk in list_of_lists[index]:
         new_combination = current_combination + chunk
-        counter = generate_combinations_parallel(list_of_lists, index + 1, new_combination, padMsg9, cyphertext,iv, output, stop_event,counter)
+        counter = generate_combinations_parallel(list_of_lists, index + 1, new_combination, padMsg9, cyphertext,iv,counter)
     return counter
 
 def generate_combinations1(list_of_lists,padMsg9,cyphertext):
@@ -119,7 +116,7 @@ def generate_combinations1(list_of_lists,padMsg9,cyphertext):
             listTmp.append(bytes.fromhex(bits_to_hex(comb)))
         listTmp1.append(listTmp)
         listTmp = []
-    n = len(listTmp1[0]) // 16
+    n = len(listTmp1[0]) // 7
     listsToElaborate = generate_multiple_lists(listTmp1,n)
     print("lenlistsToElaborate: ",len(listsToElaborate))
     # Start a separate process for each chunk in the first list
@@ -127,12 +124,14 @@ def generate_combinations1(list_of_lists,padMsg9,cyphertext):
         #process = multiprocessing.Process(target=generate_combinations_parallel, args=(list_of_lists, 1, chunk, padMsg9,cyphertext,iv,output, stop_event))
         #process.start()
         #processes.append(process)
-    for list in listsToElaborate:
-        process = multiprocessing.Process(target=generate_combinations_parallel, args=(list, 0, b'', padMsg9,cyphertext,iv,output, stop_event,0))
-        process.start()
-        processes.append(process)
-    print("len: ",len(processes))
-
+    #for list in listsToElaborate:
+        #process = multiprocessing.Process(target=generate_combinations_parallel, args=(list, 0, b'', padMsg9,cyphertext,iv,output, stop_event,0))
+        #process.start()
+        #processes.append(process)
+        
+    
+    with multiprocessing.Pool() as pool:
+            results = pool.starmap(generate_combinations_parallel, zip(listsToElaborate,repeat(0),repeat(b''),repeat(padMsg9),repeat(cyphertext),repeat(iv),repeat(0)))
     # Join all processes
     for process in processes:
         process.join()
