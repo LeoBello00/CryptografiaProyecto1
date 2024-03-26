@@ -1,6 +1,7 @@
 from itertools import repeat
 import multiprocessing
 from Crypto.Cipher import AES
+import cProfile
 MSG_PAIRS_1 = [
     (b'The most important words a man can say are, "I will do better".', 'a1e796da5a4a864aabebb9a348b684686e2f5ca3938834856a9653f4791be390b2c8119375717f37297ce18c546727a8718937bfa0f9aec150eb10085775b50e7bc37846cc804fbfa1b9d307f97f7804'),
     (b'The purpose of a storyteller is not to tell you how to think, but to give you questions to think upon.', '8706f4fd4e7f1f20d5d1702fbcda669b8f6a9ce206e1d3ca8eb949a6a27b83d213f6a001e6aa9cdab83d19c2ff5143c5dbed6a17d1f94bef88231d56f070d96e15491d28ca33d05a484976d8b4940339f5d28ddbddec878ea02a129aa56faebadb020c485b1399367f2890e5e571a7e73e4d2716e4cd71e5a97442145418f612'),
@@ -92,8 +93,8 @@ def generate_combinations_parallel(list_of_lists, index, current_combination, pa
     if index == len(list_of_lists):
         msg = decrypt_message(current_combination, cyphertext,iv)
         counter += 1
-        if counter % 1000000 == 0:
-            print(counter)
+        #if counter % 1000000 == 0:
+            #print(counter)
         if msg == padMsg9: # Set the stop event to signal other processes to stop
             print(current_combination)
         return counter
@@ -129,18 +130,12 @@ def generate_combinations1(list_of_lists,padMsg9,cyphertext):
         #process.start()
         #processes.append(process)
         
-    
+    #cProfile.run('generate_combinations_parallel(listsToElaborate[0], 0, b\'\', padMsg9,cyphertext,iv,0)')
     with multiprocessing.Pool() as pool:
             results = pool.starmap(generate_combinations_parallel, zip(listsToElaborate,repeat(0),repeat(b''),repeat(padMsg9),repeat(cyphertext),repeat(iv),repeat(0)))
     # Join all processes
-    for process in processes:
-        process.join()
 
     # Get results from the output queue
     results = []
-    while not output.empty():
-        result = output.get()
-        results.append(result)
-
     return results
 
